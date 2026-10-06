@@ -28,7 +28,7 @@ test('API de documentos', async (context) => {
   function request(route, options = {}, owner = 'alice') {
     return fetch(`${baseUrl}${route}`, {
       ...options,
-      headers: owner === null ? {} : { 'X-User-Id': owner },
+      headers: owner === null ? options.headers : { 'X-User-Id': owner, ...options.headers },
     });
   }
 
@@ -37,6 +37,18 @@ test('API de documentos', async (context) => {
     body.append(field, new Blob([content]), filename);
     return body;
   }
+
+  await context.test('corpo JSON malformado retorna erro JSON consistente', async () => {
+    const response = await request('/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{invalido',
+    });
+    assert.strictEqual(response.status, 400);
+    assert.deepStrictEqual(await response.json(), {
+      error: { code: 'INVALID_JSON', message: 'O corpo da requisicao e invalido.' },
+    });
+  });
 
   let document;
   await context.test('upload grava conteudo local e retorna apenas metadados publicos', async () => {
@@ -54,6 +66,7 @@ test('API de documentos', async (context) => {
     assert.strictEqual(document.owner, 'alice');
     assert.strictEqual(document.size, 8);
     assert.strictEqual(new Date(document.uploadedAt).toISOString(), document.uploadedAt);
+    assert.throws(() => repository.getFilePath('../fora-do-storage'), /Nome interno de arquivo invalido/);
   });
 
   await context.test('listagem filtra pelo dono', async () => {
@@ -96,6 +109,9 @@ test('API de documentos', async (context) => {
   await context.test('rejeita upload ausente, vazio, campo incorreto, multiplos arquivos e excesso de tamanho', async () => {
     const multiple = form('primeiro');
     multiple.append('file', new Blob(['segundo']), 'segundo.txt');
+    const extraField = new FormData();
+    extraField.append('description', 'metadata nao permitido');
+    extraField.append('file', new Blob(['arquivo']), 'relatorio.txt');
     const storageDirectory = path.resolve(__dirname, '../storage');
     const before = (await fs.readdir(storageDirectory)).sort();
     for (const [body, status, code] of [
@@ -103,6 +119,7 @@ test('API de documentos', async (context) => {
       [form(''), 400, 'EMPTY_FILE'],
       [form('arquivo', 'outro'), 400, 'INVALID_UPLOAD'],
       [multiple, 400, 'INVALID_UPLOAD'],
+      [extraField, 400, 'INVALID_UPLOAD'],
       [form('x'.repeat(33)), 413, 'FILE_TOO_LARGE'],
     ]) {
       const response = await request('/upload', { method: 'POST', body });

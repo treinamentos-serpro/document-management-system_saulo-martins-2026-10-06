@@ -5,6 +5,7 @@ const multer = require('multer');
 
 const storageDirectory = path.resolve(__dirname, '../../storage');
 const documents = new Map();
+const storageFilenamePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const uploadStorage = multer.diskStorage({
   destination(req, file, callback) {
@@ -31,7 +32,14 @@ function findByOwner(owner) {
 }
 
 function getFilePath(filename) {
-  return path.join(storageDirectory, filename);
+  if (typeof filename !== 'string' || !storageFilenamePattern.test(filename)) {
+    throw new Error('Nome interno de arquivo invalido.');
+  }
+  const filePath = path.resolve(storageDirectory, filename);
+  if (!filePath.startsWith(`${storageDirectory}${path.sep}`)) {
+    throw new Error('Caminho de arquivo fora do armazenamento permitido.');
+  }
+  return filePath;
 }
 
 async function removeFile(filename) {

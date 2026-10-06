@@ -2,8 +2,6 @@ const path = require('node:path');
 const multer = require('multer');
 const service = require('../services/documentService');
 
-const receiveUpload = multer(service.getUploadOptions()).single('file');
-
 function validateUser(req, res, next) {
   const owner = req.get('X-User-Id');
   if (!owner || !owner.trim() || owner.length > 100) {
@@ -50,6 +48,16 @@ function handleError(error, req, res, next) {
     });
   }
 
+  if (error.type === 'entity.parse.failed' || error.type === 'entity.too.large') {
+    const tooLarge = error.type === 'entity.too.large';
+    return res.status(tooLarge ? 413 : 400).json({
+      error: {
+        code: tooLarge ? 'REQUEST_TOO_LARGE' : 'INVALID_JSON',
+        message: tooLarge ? 'O corpo da requisicao excede o limite permitido.' : 'O corpo da requisicao e invalido.',
+      },
+    });
+  }
+
   const expected = ['FILE_REQUIRED', 'EMPTY_FILE', 'FILE_TOO_LARGE', 'DOCUMENT_NOT_FOUND'].includes(error.code);
   res.status(expected ? error.status : 500).json({
     error: {
@@ -59,4 +67,4 @@ function handleError(error, req, res, next) {
   });
 }
 
-module.exports = { validateUser, receiveUpload, upload, list, download, handleError };
+module.exports = { validateUser, upload, list, download, handleError };

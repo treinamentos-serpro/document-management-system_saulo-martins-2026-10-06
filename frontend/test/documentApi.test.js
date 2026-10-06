@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { listDocuments, uploadDocument, downloadDocument } from '../src/services/documentApi.js';
+import { ApiError, listDocuments, uploadDocument, downloadDocument } from '../src/services/documentApi.js';
 
 test('lista documentos via /api e envia identidade e signal', async (context) => {
   const documents = [{ id: 'document-id', originalName: 'relatorio.txt' }];
@@ -36,8 +36,16 @@ test('baixa o binario com identidade e identificador codificado', async (context
 });
 
 test('preserva mensagens de erro do backend', async (context) => {
-  context.mock.method(globalThis, 'fetch', async () => Response.json({ error: { message: 'Arquivo muito grande.' } }, { status: 413 }));
-  await assert.rejects(uploadDocument(new File(['conteudo'], 'arquivo.txt'), 'usuario-123'), /Arquivo muito grande/);
+  context.mock.method(globalThis, 'fetch', async () => Response.json({
+    error: { code: 'FILE_TOO_LARGE', message: 'Arquivo muito grande.' },
+  }, { status: 413 }));
+  await assert.rejects(uploadDocument(new File(['conteudo'], 'arquivo.txt'), 'usuario-123'), (error) => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.message, 'Arquivo muito grande.');
+    assert.equal(error.status, 413);
+    assert.equal(error.code, 'FILE_TOO_LARGE');
+    return true;
+  });
 });
 
 test('trata respostas de erro sem JSON', async (context) => {

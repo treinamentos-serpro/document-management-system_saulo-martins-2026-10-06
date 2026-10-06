@@ -1,3 +1,12 @@
+export class ApiError extends Error {
+  constructor(message, status, code) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function request(path, userId, options = {}) {
   let response;
   try {
@@ -12,7 +21,11 @@ async function request(path, userId, options = {}) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message || 'Nao foi possivel concluir a operacao.');
+    throw new ApiError(
+      body?.error?.message || 'Nao foi possivel concluir a operacao.',
+      response.status,
+      body?.error?.code || 'REQUEST_FAILED'
+    );
   }
   return response;
 }

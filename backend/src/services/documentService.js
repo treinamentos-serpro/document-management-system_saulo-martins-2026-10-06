@@ -10,9 +10,26 @@ function createError(status, code, message) {
   return Object.assign(new Error(message), { status, code });
 }
 
-function publicMetadata(document) {
+function toPublicMetadata(document) {
   const { id, originalName, size, uploadedAt, owner } = document;
   return { id, originalName, size, uploadedAt, owner };
+}
+
+function validateUploadedFile(file) {
+  if (file.size === 0) {
+    throw createError(400, 'EMPTY_FILE', 'O arquivo deve ter conteudo.');
+  }
+  if (file.size > maxFileSize) {
+    throw createError(413, 'FILE_TOO_LARGE', 'O arquivo excede o limite permitido.');
+  }
+}
+
+function findOwnedDocument(id, owner) {
+  const document = repository.findById(id);
+  if (!document || document.owner !== owner) {
+    throw createError(404, 'DOCUMENT_NOT_FOUND', 'Documento nao encontrado.');
+  }
+  return document;
 }
 
 async function uploadDocument(file, owner) {
@@ -21,13 +38,7 @@ async function uploadDocument(file, owner) {
   }
 
   try {
-    if (file.size === 0) {
-      throw createError(400, 'EMPTY_FILE', 'O arquivo deve ter conteudo.');
-    }
-    if (file.size > maxFileSize) {
-      throw createError(413, 'FILE_TOO_LARGE', 'O arquivo excede o limite permitido.');
-    }
-
+    validateUploadedFile(file);
     const document = repository.save({
       id: randomUUID(),
       originalName: file.originalname,
@@ -36,7 +47,7 @@ async function uploadDocument(file, owner) {
       owner,
       filename: file.filename,
     });
-    return publicMetadata(document);
+    return toPublicMetadata(document);
   } catch (error) {
     await repository.removeFile(file.filename);
     throw error;
@@ -46,22 +57,20 @@ async function uploadDocument(file, owner) {
 function listDocuments(owner) {
   return repository.findByOwner(owner)
     .sort((first, second) => second.uploadedAt.localeCompare(first.uploadedAt))
-    .map(publicMetadata);
+    .map(toPublicMetadata);
 }
 
 function getDocumentDownload(id, owner) {
-  const document = repository.findById(id);
-  if (!document || document.owner !== owner) {
-    throw createError(404, 'DOCUMENT_NOT_FOUND', 'Documento nao encontrado.');
-  }
+  const document = findOwnedDocument(id, owner);
   return {
     originalName: document.originalName,
     filePath: repository.getFilePath(document.filename),
   };
 }
 
-function getUploadOptions() {
-  return { storage: repository.uploadStorage, limits: { fileSize: maxFileSize + 1, files: 1 } };
-}
-
-module.exports = { uploadDocument, listDocuments, getDocumentDownload, getUploadOptions };
+module.exports = {
+  uploadDocument,
+  listDocuments,
+  getDocumentDownload,
+  maxFileSizeBytes: maxFileSize,
+};

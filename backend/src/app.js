@@ -12,6 +12,7 @@
 
 const express = require('express');
 const documentRoutes = require('./routes/documentRoutes');
+const documentController = require('./controllers/documentController');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,8 @@ app.use(documentRoutes);
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+app.use(documentController.handleError);
 
 if (require.main === module) {
   app.listen(PORT, () => {
