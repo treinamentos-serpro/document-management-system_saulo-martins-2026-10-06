@@ -1,124 +1,169 @@
-# Especificacao - Document Management System
+# Especificação - Document Management System
 
 ## 1. Objetivo
 
-Permitir que usuarios enviem documentos, consultem os documentos associados ao seu identificador e baixem os arquivos. Os arquivos ficam no filesystem local e os metadados sao mantidos em memoria.
+Permitir que usuários enviem documentos, consultem os documentos associados ao seu identificador e baixem seus arquivos, mantendo os arquivos no filesystem local e os metadados em memória.
 
 ## 2. Escopo
 
 ### Dentro do escopo
 
-- Upload de um documento por requisicao.
-- Listagem dos documentos associados ao identificador de usuario da requisicao.
-- Download de um documento por identificador, limitado ao usuario associado.
-- Armazenamento local em `backend/storage` com `multer` e `diskStorage`.
-- Metadados mantidos em memoria.
+- Upload de um documento por requisição.
+- Listagem dos documentos associados ao usuário da requisição.
+- Download de um documento pelo identificador, respeitando o usuário associado.
+- Armazenamento dos arquivos em `backend/storage`, usando `multer` com `diskStorage`.
+- Armazenamento temporário dos metadados em memória.
 - Interface web para upload, listagem e download.
 
 ### Fora do escopo
 
-- Autenticacao e gestao de contas.
-- Banco de dados, armazenamento em nuvem ou servicos externos.
-- Versionamento, edicao, exclusao e compartilhamento.
-- Persistencia de metadados apos reiniciar o backend.
-- Busca avancada, pastas e classificacao.
+- Autenticação, autorização baseada em credenciais ou gestão de contas.
+- Armazenamento em nuvem, banco de dados ou serviços externos.
+- Versionamento, edição, exclusão ou compartilhamento de documentos.
+- Persistência dos metadados após reiniciar o backend.
+- Busca avançada, pastas e classificação de documentos.
 
 ## 3. Requisitos funcionais
 
 | ID | Requisito |
 | --- | --- |
-| RF-01 | O usuario pode enviar um arquivo em `multipart/form-data`, no campo `file`. |
-| RF-02 | O sistema gera um identificador unico e um nome interno para armazenamento; o nome original nunca e usado como caminho local. |
-| RF-03 | O sistema registra identificador, nome original, tamanho, data de upload e usuario associado. |
-| RF-04 | O usuario pode listar somente os metadados associados ao identificador enviado na requisicao. |
-| RF-05 | O usuario pode baixar um documento pelo identificador se o documento existir e estiver associado ao mesmo identificador de usuario. |
-| RF-06 | O sistema rejeita requisicoes sem arquivo, com arquivo vazio ou acima do limite configurado. |
-| RF-07 | O sistema retorna erros de validacao e de documento inexistente em JSON consistente. |
-| RF-08 | A interface informa estados de carregamento, sucesso e erro nos fluxos de upload, listagem e download. |
+| RF-01 | O usuário pode enviar um arquivo usando `multipart/form-data`, no campo `file`. |
+| RF-02 | O sistema gera um identificador único e um nome de armazenamento interno, sem usar o nome fornecido pelo usuário como caminho no filesystem. |
+| RF-03 | O sistema registra `id`, `originalName`, `size`, `uploadedAt` e `owner` para cada upload aceito. |
+| RF-04 | O usuário pode listar somente os metadados associados ao seu identificador. |
+| RF-05 | O usuário pode baixar um documento pelo identificador se ele existir e estiver associado ao seu identificador. |
+| RF-06 | O sistema rejeita requisições sem arquivo, com mais de um arquivo, com arquivo vazio ou acima do limite configurado. |
+| RF-07 | O sistema informa erros de validação e de documento inexistente em formato JSON consistente. |
+| RF-08 | A interface apresenta estados de carregamento, sucesso e erro para upload, listagem e download. |
 
-## 4. Requisitos nao funcionais
+## 4. Requisitos não funcionais
 
 | ID | Requisito |
 | --- | --- |
-| RNF-01 | Os arquivos sao gravados exclusivamente em `backend/storage` por `multer` com `diskStorage`. |
-| RNF-02 | Os metadados ficam em memoria e se perdem quando o processo backend reinicia. |
-| RNF-03 | A porta e o limite de upload sao configuraveis por `PORT` e `MAX_FILE_SIZE_BYTES`. |
-| RNF-04 | O limite padrao por arquivo e 10 MiB (10485760 bytes). |
-| RNF-05 | A API nao expoe caminhos locais nem nomes internos dos arquivos. |
-| RNF-06 | Nomes de arquivos e valores recebidos do cliente sao dados nao confiaveis. |
-| RNF-07 | O identificador de usuario nao e autenticacao e nao protege a aplicacao contra clientes maliciosos. |
+| RNF-01 | Os arquivos são gravados exclusivamente no filesystem local da aplicação, em `backend/storage`, por meio de `multer` com `diskStorage`. |
+| RNF-02 | Os metadados são mantidos em memória nesta fase; não há garantia de persistência após reinício do processo. |
+| RNF-03 | Configurações operacionais são obtidas por variáveis de ambiente, incluindo `PORT` e `MAX_FILE_SIZE_BYTES`. |
+| RNF-04 | O limite padrão de arquivo é 10 MiB (`10485760` bytes), substituível por `MAX_FILE_SIZE_BYTES`. |
+| RNF-05 | O backend não expõe o caminho físico nem o nome interno do arquivo nas respostas da API. |
+| RNF-06 | O nome original é tratado como dado não confiável e não pode controlar caminhos ou nomes no filesystem. |
+| RNF-07 | O identificador do usuário não representa autenticação. Sem autenticação, o sistema não deve ser considerado seguro para exposição pública. |
 
-## 5. Identidade do usuario
+## 5. Identidade do usuário
 
-As rotas funcionais exigem o cabecalho `X-User-Id`, nao vazio e com no maximo 100 caracteres. O backend associa o valor ao documento e o utiliza para filtrar listagem e download. Esse mecanismo serve somente para associacao funcional; autenticacao e autorizacao confiavel nao fazem parte desta versao.
+Nesta versão, a identidade é fornecida pelo cabeçalho `X-User-Id`. O valor é obrigatório, não vazio e limitado a 100 caracteres. O backend o registra como `owner` e o utiliza para filtrar listagem e download.
+
+Esse mecanismo é apenas uma associação funcional: qualquer cliente pode declarar outro valor de cabeçalho. Autenticação e verificação confiável da identidade estão fora do escopo.
 
 ## 6. Modelo de dados
 
-### Metadados publicos
+### Metadados públicos do documento
 
-| Campo | Tipo | Descricao |
+| Campo | Tipo | Descrição |
 | --- | --- | --- |
-| `id` | string | Identificador unico gerado pelo sistema. |
+| `id` | string | Identificador único gerado pelo sistema. |
 | `originalName` | string | Nome original informado no upload. |
 | `size` | number | Tamanho do arquivo em bytes. |
-| `uploadedAt` | string | Data e hora em ISO 8601 UTC. |
+| `uploadedAt` | string | Data/hora de recebimento em ISO 8601 UTC. |
 | `owner` | string | Valor de `X-User-Id` associado ao documento. |
 
-### Armazenamento interno
+### Dados internos de armazenamento
 
-O repositorio mantem uma associacao entre `id` e o nome gerado para o arquivo em disco. Essa associacao nao e retornada pela API. Os metadados e o indice em memoria sao perdidos ao reiniciar o backend; arquivos podem permanecer em disco sem metadados correspondentes.
+O repositório mantém uma associação interna entre `id` e o nome gerado para o arquivo no disco. Essa associação não é retornada pela API. O conteúdo do arquivo reside em `backend/storage`; os metadados e o índice em memória são perdidos ao reiniciar o processo. Arquivos podem permanecer no disco sem metadados correspondentes após um reinício.
 
 ## 7. Contratos de API
 
-Todas as rotas funcionais exigem `X-User-Id`. O backend expoe `/upload`, `/documents` e `/documents/:id/download`. No desenvolvimento, o frontend usa o prefixo `/api`, removido pelo proxy do Vite.
+As rotas do backend são `/upload`, `/documents` e `/documents/:id/download`. No desenvolvimento, o frontend chama as mesmas rotas sob o prefixo `/api`; o proxy do Vite remove esse prefixo.
 
-Erros sao retornados no formato:
+Todas as rotas funcionais exigem `X-User-Id`.
+
+### Formato de erro
+
+Erros da API usam JSON:
 
 ```json
 {
   "error": {
     "code": "DOCUMENT_NOT_FOUND",
-    "message": "Documento nao encontrado."
+    "message": "Documento não encontrado."
   }
 }
 ```
 
+`code` é estável para uso pelo cliente; `message` é legível e em português. Nenhuma resposta de erro inclui stack trace ou caminho local.
+
 ### `POST /upload`
 
-- Entrada: `multipart/form-data` com um arquivo no campo `file`.
-- Validacao: arquivo nao vazio e tamanho menor ou igual a `MAX_FILE_SIZE_BYTES`.
-- Sucesso: `201 Created`, retornando `document` com `id`, `originalName`, `size`, `uploadedAt` e `owner`.
-- Erros: `400` para usuario/arquivo invalido, `413` para arquivo acima do limite e `500` para falha interna.
+- Entrada: `multipart/form-data`, exatamente um arquivo no campo `file`.
+- Restrições: arquivo não vazio e tamanho menor ou igual a `MAX_FILE_SIZE_BYTES`.
+- Sucesso: `201 Created`.
+
+```json
+{
+  "document": {
+    "id": "identificador-gerado",
+    "originalName": "relatorio.pdf",
+    "size": 2048,
+    "uploadedAt": "2026-10-06T12:00:00.000Z",
+    "owner": "usuario-123"
+  }
+}
+```
+
+- Erros:
+  - `400 Bad Request`: cabeçalho de usuário ausente/inválido, arquivo ausente, arquivo vazio ou campo incorreto.
+  - `413 Payload Too Large`: arquivo acima do limite.
+  - `500 Internal Server Error`: falha ao gravar arquivo ou registrar metadados.
 
 ### `GET /documents`
 
 - Entrada: sem corpo; exige `X-User-Id`.
-- Sucesso: `200 OK`, `{ "documents": [...] }`, ordenado por data decrescente. Lista vazia retorna `{"documents":[]}`.
+- Sucesso: `200 OK`, com lista ordenada por `uploadedAt` decrescente.
+
+```json
+{
+  "documents": [
+    {
+      "id": "identificador-gerado",
+      "originalName": "relatorio.pdf",
+      "size": 2048,
+      "uploadedAt": "2026-10-06T12:00:00.000Z",
+      "owner": "usuario-123"
+    }
+  ]
+}
+```
+
+Uma lista vazia é sucesso e retorna `{"documents":[]}`. Erros: `400 Bad Request` para identidade ausente/inválida; `500 Internal Server Error` para falha inesperada.
 
 ### `GET /documents/:id/download`
 
 - Entrada: identificador na URL e `X-User-Id`.
-- Sucesso: `200 OK`, conteudo binario com `Content-Disposition: attachment` e nome original.
-- Erros: `400` para usuario/identificador invalido, `404` para documento inexistente, de outro usuario ou sem arquivo, e `500` para outra falha de leitura.
+- Sucesso: `200 OK`, corpo binário do arquivo, `Content-Type` detectado quando possível e `Content-Disposition: attachment` com o nome original devidamente tratado.
+- Erros:
+  - `400 Bad Request`: identidade ou identificador inválido.
+  - `404 Not Found`: documento inexistente ou pertencente a outro usuário.
+  - `500 Internal Server Error`: falha de leitura do arquivo.
 
-## 8. Decisoes arquiteturais
+## 8. Decisões arquiteturais
 
-- Backend CommonJS com Express; frontend React e Vite.
-- Fluxo de dependencia: `routes -> controllers -> services -> repositories`.
-- Rotas conectam endpoints e middlewares; controllers validam entrada HTTP e formatam respostas; services concentram regras de negocio; repositories mantem metadados em memoria e acessam arquivos locais.
-- `multer` com `diskStorage` grava uploads em `backend/storage` usando nome interno gerado pelo sistema.
-- O frontend consome a API por `fetch` com prefixo `/api`.
-- Nao adicionar banco de dados, autenticacao ou armazenamento externo nesta fase.
+- Backend em CommonJS com Express; frontend em React e Vite.
+- Dependências seguem o fluxo `routes -> controllers -> services -> repositories`.
+- `routes` declaram endpoints e conectam middlewares/controllers; `controllers` tratam HTTP e validam entrada; `services` aplicam regras de negócio e associação ao usuário; `repositories` gerenciam metadados em memória e acesso aos arquivos locais.
+- `multer` com `diskStorage` grava os uploads em `backend/storage`; o nome físico é gerado pelo sistema. O nome original é preservado apenas nos metadados e no download.
+- O frontend chama a API usando `fetch` com prefixo `/api`, conforme o proxy de desenvolvimento existente.
+- Não adicionar banco de dados, autenticação ou armazenamento externo nesta fase.
 
-## 9. Plano de execucao
+## 9. Plano de execução do produto
 
-1. Formalizar contratos, validacoes, identidade e limite de upload. Aceite: requisitos e respostas de API estao definidos.
-2. Implementar o backend em camadas, incluindo upload local, metadados em memoria, isolamento por usuario e download. Aceite: testes cobrem sucesso, validacoes, limites, isolamento e erros de arquivo.
-3. Implementar a interface React para upload, listagem e download. Aceite: estados de sucesso, carregamento e erro nos fluxos principais.
-4. Validar integracao ponta a ponta e configuracao local. Aceite: fluxo via proxy Vite, arquivos em `backend/storage` e nenhuma dependencia externa de armazenamento.
+Estas etapas descrevem a implementação futura; esta tarefa se limita à criação deste documento.
+
+1. Formalizar contratos, validações, identidade e limites do upload. Aceite: requisitos e respostas da API estão definidos sem ambiguidades relevantes.
+2. Implementar o backend em camadas, incluindo upload local, metadados em memória, isolamento por `owner` e download. Aceite: testes cobrem sucesso, validações, limites, isolamento e erros de arquivo.
+3. Implementar a interface React para upload, listagem e download usando a API. Aceite: estados de sucesso, carregamento e erro são apresentados nos fluxos principais.
+4. Validar a integração ponta a ponta e a configuração local. Aceite: o fluxo funciona via proxy do Vite, arquivos ficam em `backend/storage` e não há dependência externa de armazenamento.
 
 ## 10. Riscos conhecidos
 
-- Reiniciar o backend apaga o indice de metadados em memoria, deixando arquivos no disco sem acesso pela API.
-- `X-User-Id` nao autentica o solicitante e nao deve ser considerado controle de acesso seguro.
-- Sem cota total ou politica de limpeza, uploads podem consumir o espaco disponivel em disco.
+- Reiniciar o backend apaga o índice de metadados em memória, deixando arquivos no disco inacessíveis pela API.
+- `X-User-Id` não autentica o solicitante; não deve ser tratado como controle de acesso seguro.
+- Sem limite de armazenamento total ou política de limpeza, uploads podem consumir espaço em disco.
